@@ -83,6 +83,7 @@
         <input id="dropoffLocation" name="dropoff_location" required autocomplete="off" />
       </label>
       <input type="hidden" id="dropoffPlaceId" name="dropoff_place_id" />
+      <p id="mapsStatus" class="muted"></p>
 
       <label>Notes (optional)
         <textarea name="notes" rows="4"></textarea>
@@ -123,11 +124,16 @@
     const dropoffInput = document.getElementById("dropoffLocation");
     const pickupPlaceId = document.getElementById("pickupPlaceId");
     const dropoffPlaceId = document.getElementById("dropoffPlaceId");
+    const mapsStatus = document.getElementById("mapsStatus");
 
     let selectedSlot = "";
     let selectedSlotLabel = "";
     let currentDays = 14;
     let mapsReady = false;
+
+    function setMapsStatus(message) {
+      mapsStatus.textContent = message || "";
+    }
 
     function resetMessages() {
       result.style.display = "none";
@@ -153,11 +159,18 @@
           bizPhone.textContent = cfg.business_phone;
         }
         if (cfg.google_maps_api_key) {
-          await loadGoogleMaps(cfg.google_maps_api_key);
-          setupAutocomplete();
+          try {
+            await loadGoogleMaps(cfg.google_maps_api_key);
+            setupAutocomplete();
+            setMapsStatus("Address autocomplete is active.");
+          } catch (mapsError) {
+            setMapsStatus(`Address autocomplete unavailable: ${mapsError.message}`);
+          }
+        } else {
+          setMapsStatus("Address autocomplete unavailable: Google Maps key is not configured.");
         }
       } catch {
-        // keep defaults
+        setMapsStatus("Address autocomplete unavailable: failed to load public config.");
       }
     }
 
@@ -181,6 +194,9 @@
 
     function setupAutocomplete() {
       if (!mapsReady) return;
+      if (!window.google || !window.google.maps || !window.google.maps.places) {
+        throw new Error("Google Places library not available. Enable Places API for this key.");
+      }
       const opts = {
         fields: ["formatted_address", "place_id", "name"],
         componentRestrictions: { country: "au" },
