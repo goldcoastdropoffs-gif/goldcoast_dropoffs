@@ -221,6 +221,9 @@
         return Promise.resolve();
       }
       return new Promise((resolve, reject) => {
+        window.gm_authFailure = () => {
+          reject(new Error("Google auth failure. Check billing, API key restrictions, and allowed referrers."));
+        };
         const script = document.createElement("script");
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
         script.async = true;
@@ -228,7 +231,7 @@
           mapsReady = true;
           resolve();
         };
-        script.onerror = () => reject(new Error("Failed to load Google Maps script."));
+        script.onerror = () => reject(new Error("Failed to load Google Maps script. Check the API key and project billing."));
         document.head.appendChild(script);
       });
     }
