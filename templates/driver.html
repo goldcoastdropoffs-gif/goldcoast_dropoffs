@@ -328,6 +328,13 @@
       text-decoration: underline;
     }
 
+    .card-whatsapp {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+      margin: -6px 0 12px;
+    }
+
     .card-service {
       display: inline-block;
       background: #f0f6ff;
@@ -801,6 +808,9 @@
       const serviceLabel = SERVICE_LABELS[booking.service_type] || booking.service_type;
       const price = PRICE_MAP[booking.service_type] || "?";
       const timeLabel = formatTime(booking.preferred_time);
+      const whatsappHtml = booking.whatsapp_number
+        ? `<div class="card-whatsapp">WhatsApp: ${escapeHtml(booking.whatsapp_number)}</div>`
+        : "";
 
       // Timeline info
       let timelineHtml = "";
@@ -859,6 +869,7 @@
         </div>
         <div class="card-customer">${escapeHtml(booking.full_name)}</div>
         <a href="tel:${escapeHtml(booking.phone)}" class="card-phone">${escapeHtml(booking.phone)}</a>
+        ${whatsappHtml}
         <div>
           <span class="card-service">${escapeHtml(serviceLabel)}</span>
           <span class="card-price">AUD $${price}</span>

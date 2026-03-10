@@ -54,6 +54,7 @@ class Settings:
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-change-me")
     stripe_secret_key: str = os.getenv("STRIPE_SECRET_KEY", "")
     stripe_publishable_key: str = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+    stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
 
 settings = Settings()
@@ -82,6 +83,7 @@ class BookingRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=120)
     email: EmailStr
     phone: str = Field(..., min_length=6, max_length=30)
+    whatsapp_number: str = Field(default="", max_length=30)
     service_type: ServiceType
     pickup_location: str = Field(..., min_length=3, max_length=250)
     dropoff_location: str = Field(..., min_length=3, max_length=250)
@@ -120,6 +122,7 @@ class StoredBooking:
     full_name: str
     email: str
     phone: str
+    whatsapp_number: str
     service_type: str
     pickup_location: str
     dropoff_location: str
@@ -131,6 +134,7 @@ class StoredBooking:
     delivered_at: str = ""
     payment_status: str = "paid"  # paid (default for old bookings), unpaid
     stripe_session_id: str = ""
+    confirmation_sent_at: str = ""
 
 
 def _make_booking_id(item: dict) -> str:
@@ -153,6 +157,8 @@ def _load_bookings() -> list[StoredBooking]:
         item.setdefault("delivered_at", "")
         item.setdefault("payment_status", "paid")
         item.setdefault("stripe_session_id", "")
+        item.setdefault("whatsapp_number", "")
+        item.setdefault("confirmation_sent_at", "")
         out.append(StoredBooking(**item))
     return out
 
@@ -185,6 +191,12 @@ def _booked_slot_keys(bookings: list[StoredBooking]) -> set[str]:
 
 def _format_aud(cents: int) -> str:
     return f"{cents / 100:.2f}"
+
+
+def _format_contact_line(phone: str, whatsapp_number: str) -> str:
+    if whatsapp_number:
+        return f"Customer phone: {phone}\nCustomer WhatsApp: {whatsapp_number}\n"
+    return f"Customer phone: {phone}\n"
 
 
 def _assert_email_ready() -> None:
@@ -249,17 +261,99 @@ def _build_email_body(booking: BookingRequest, price_cents: int) -> str:
     return (
         f"Booking confirmation - {settings.business_name}\n\n"
         f"Customer: {booking.full_name}\n"
-        f"Customer phone: {booking.phone}\n"
+        f"{_format_contact_line(booking.phone, booking.whatsapp_number)}"
         f"Customer email: {booking.email}\n"
         f"Service: {service_label}\n"
         f"Price: AUD ${_format_aud(price_cents)}\n"
         f"Pickup: {booking.pickup_location}\n"
         f"Dropoff: {booking.dropoff_location}\n"
+        f"Booking reference: pending payment confirmation\n"
         f"Booked slot: {booking.preferred_time.strftime('%Y-%m-%d %H:%M')}\n"
         f"Notes: {booking.notes or '-'}\n\n"
         f"Business phone: {settings.business_phone}\n"
         f"Business email: {settings.business_email}\n"
     )
+
+
+def _build_paid_email_body(booking: StoredBooking) -> str:
+    price_cents = PRICE_MAP.get(booking.service_type, 0)
+    return (
+        f"Booking confirmed - {settings.business_name}\n\n"
+        f"Booking reference: {booking.booking_id}\n"
+        f"Customer: {booking.full_name}\n"
+        f"{_format_contact_line(booking.phone, booking.whatsapp_number)}"
+        f"Customer email: {booking.email}\n"
+        f"Service: {SERVICE_LABELS.get(booking.service_type, booking.service_type)}\n"
+        f"Price: AUD ${_format_aud(price_cents)} (paid)\n"
+        f"Pickup: {booking.pickup_location}\n"
+        f"Dropoff: {booking.dropoff_location}\n"
+        f"Booked slot: {booking.preferred_time.replace('T', ' ')}\n"
+        f"Notes: {booking.notes or '-'}\n\n"
+        f"We have your booking and will contact you if anything changes.\n"
+        f"Business phone: {settings.business_phone}\n"
+        f"Business email: {settings.business_email}\n"
+    )
+
+
+def _mark_confirmation_state(booking_id: str, state: str) -> StoredBooking:
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        booking = next((b for b in bookings if b.booking_id == booking_id), None)
+        if not booking:
+            raise LookupError("Booking not found.")
+        booking.confirmation_sent_at = state
+        _save_bookings(bookings)
+        return StoredBooking(**asdict(booking))
+
+
+def _finalize_paid_booking(session_id: str, booking_id: str | None = None) -> tuple[StoredBooking, str | None]:
+    booking_snapshot: StoredBooking | None = None
+    should_send = False
+
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        booking = next((b for b in bookings if b.stripe_session_id == session_id), None)
+        if not booking and booking_id:
+            booking = next((b for b in bookings if b.booking_id == booking_id), None)
+        if not booking:
+            raise LookupError("Booking not found.")
+
+        booking.stripe_session_id = session_id
+        booking.payment_status = "paid"
+        if booking.confirmation_sent_at not in {"", "__sending__"}:
+            _save_bookings(bookings)
+            booking_snapshot = StoredBooking(**asdict(booking))
+            return booking_snapshot, None
+
+        should_send = True
+        booking.confirmation_sent_at = "__sending__"
+        _save_bookings(bookings)
+        booking_snapshot = StoredBooking(**asdict(booking))
+
+    if not should_send:
+        return booking_snapshot, None
+
+    try:
+        _assert_email_ready()
+        body = _build_paid_email_body(booking_snapshot)
+        _send_email(
+            booking_snapshot.email,
+            f"Booking Confirmed - {settings.business_name} - Ref {booking_snapshot.booking_id}",
+            body,
+        )
+        if settings.business_email:
+            _send_email(
+                settings.business_email,
+                f"New Paid Booking - {booking_snapshot.full_name} - Ref {booking_snapshot.booking_id}",
+                body,
+            )
+    except Exception as exc:
+        _mark_confirmation_state(booking_snapshot.booking_id, "")
+        return booking_snapshot, str(exc)
+
+    sent_at = datetime.now().isoformat(timespec="seconds")
+    booking_snapshot = _mark_confirmation_state(booking_snapshot.booking_id, sent_at)
+    return booking_snapshot, None
 
 
 def _google_json(url: str) -> dict:
@@ -537,6 +631,7 @@ def create_booking(booking: BookingRequest) -> BookingResponse:
             full_name=booking.full_name,
             email=str(booking.email),
             phone=booking.phone,
+            whatsapp_number=booking.whatsapp_number,
             service_type=booking.service_type,
             pickup_location=booking.pickup_location,
             dropoff_location=booking.dropoff_location,
@@ -600,6 +695,7 @@ async def create_checkout(booking: BookingRequest, request: Request):
             full_name=booking.full_name,
             email=str(booking.email),
             phone=booking.phone,
+            whatsapp_number=booking.whatsapp_number,
             service_type=booking.service_type,
             pickup_location=booking.pickup_location,
             dropoff_location=booking.dropoff_location,
@@ -630,6 +726,7 @@ async def create_checkout(booking: BookingRequest, request: Request):
                 "quantity": 1,
             }],
             mode="payment",
+            client_reference_id=booking_id,
             customer_email=str(booking.email),
             success_url=f"{base_url}/booking-success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base_url}/booking-cancelled?booking_id={booking_id}",
@@ -664,6 +761,25 @@ def booking_success(session_id: str):
 
     if session.payment_status != "paid":
         return HTMLResponse(_success_page("Payment pending", "Your payment is still processing. You will receive a confirmation email shortly."))
+
+    try:
+        booking, email_error = _finalize_paid_booking(
+            session_id,
+            (session.metadata or {}).get("booking_id"),
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    slot_label = booking.preferred_time.replace("T", " ")
+    email_line = (
+        f"A confirmation email has been sent to {booking.email}."
+        if not email_error
+        else f"Payment is confirmed, but email delivery failed: {email_error}"
+    )
+    return HTMLResponse(_success_page(
+        "Payment successful!",
+        f"Your booking is confirmed for {slot_label}. Reference: {booking.booking_id}. {email_line}",
+    ))
 
     with BOOKINGS_LOCK:
         bookings = _load_bookings()
@@ -703,6 +819,32 @@ def booking_success(session_id: str):
         "Payment successful!",
         f"Your booking is confirmed for {slot_label}. A confirmation email has been sent to {booking.email}.",
     ))
+
+
+@app.post("/api/stripe-webhook")
+async def stripe_webhook(request: Request):
+    if not settings.stripe_webhook_secret:
+        raise HTTPException(status_code=500, detail="Stripe webhook secret not configured.")
+
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload=payload, sig_header=signature, secret=settings.stripe_webhook_secret)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid webhook payload: {exc}") from exc
+    except stripe.error.SignatureVerificationError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid webhook signature: {exc}") from exc
+
+    if event["type"] in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
+        session = event["data"]["object"]
+        if session.get("payment_status") == "paid":
+            booking_id = (session.get("metadata") or {}).get("booking_id") or session.get("client_reference_id")
+            try:
+                _finalize_paid_booking(session["id"], booking_id)
+            except LookupError:
+                pass
+
+    return {"received": True}
 
 
 @app.get("/booking-cancelled", response_class=HTMLResponse)

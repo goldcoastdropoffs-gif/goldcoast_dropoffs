@@ -75,6 +75,10 @@
         <input name="phone" required />
       </label>
 
+      <label>WhatsApp number (optional)
+        <input name="whatsapp_number" placeholder="If different from your phone number" />
+      </label>
+
       <label>Service type
         <select name="service_type" required>
           <option value="gold_coast">Gold Coast local, same day (4 hrs / before 1pm → COB) — $30</option>
@@ -100,6 +104,8 @@
       <label>Notes (optional)
         <textarea name="notes" rows="4"></textarea>
       </label>
+
+      <p class="muted">After payment, we send a booking confirmation email with your reference number. If you add WhatsApp, the driver can also use that contact if needed.</p>
 
       <button type="submit" id="submitBtn">Book &amp; Pay Now</button>
     </form>
