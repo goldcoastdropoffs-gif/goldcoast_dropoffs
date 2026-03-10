@@ -261,8 +261,17 @@ def _google_json(url: str) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+def _google_maps_validation_enabled() -> bool:
+    key = settings.google_maps_api_key.strip()
+    if not key:
+        return False
+    if key.startswith("REPLACE_WITH_"):
+        return False
+    return True
+
+
 def _normalize_address(address: str, place_id: str | None) -> str:
-    if not settings.google_maps_api_key:
+    if not _google_maps_validation_enabled():
         return address
 
     if place_id:
@@ -273,6 +282,8 @@ def _normalize_address(address: str, place_id: str | None) -> str:
         formatted = result.get("formatted_address")
         if status == "OK" and formatted:
             return formatted
+        if status == "REQUEST_DENIED":
+            return address
         raise HTTPException(status_code=400, detail=f"Invalid selected address (place details status: {status}).")
 
     query = urlencode({"address": address, "key": settings.google_maps_api_key})
@@ -283,6 +294,8 @@ def _normalize_address(address: str, place_id: str | None) -> str:
         formatted = results[0].get("formatted_address")
         if formatted:
             return formatted
+    if status == "REQUEST_DENIED":
+        return address
     raise HTTPException(status_code=400, detail=f"Address could not be confirmed by Google Maps (status: {status}).")
 
 
