@@ -61,18 +61,20 @@ signer = URLSafeTimedSerializer(settings.secret_key)
 if settings.stripe_secret_key:
     stripe.api_key = settings.stripe_secret_key
 
-ServiceType = Literal["gold_coast", "direct", "gc_to_brisbane"]
+ServiceType = Literal["gold_coast", "direct", "gc_to_brisbane", "test_trip"]
 
 PRICE_MAP: dict[ServiceType, int] = {
-    "gold_coast": 30,
-    "direct": 60,
-    "gc_to_brisbane": 60,
+    "gold_coast": 3000,
+    "direct": 6000,
+    "gc_to_brisbane": 6000,
+    "test_trip": 50,
 }
 
 SERVICE_LABELS: dict[ServiceType, str] = {
     "gold_coast": "Gold Coast local — same day (4 hrs / before 1pm → COB)",
     "direct": "Direct now service — straight to destination",
     "gc_to_brisbane": "Gold Coast to Brisbane — lift or delivery",
+    "test_trip": "Test trip - Stripe/email test",
 }
 
 
@@ -92,7 +94,7 @@ class BookingRequest(BaseModel):
 class BookingResponse(BaseModel):
     success: bool
     message: str
-    price_aud: int
+    price_aud: float
     booked_slot: str
 
 
@@ -181,6 +183,10 @@ def _booked_slot_keys(bookings: list[StoredBooking]) -> set[str]:
     return {b.preferred_time for b in bookings if b.payment_status == "paid"}
 
 
+def _format_aud(cents: int) -> str:
+    return f"{cents / 100:.2f}"
+
+
 def _assert_email_ready() -> None:
     required = {
         "BUSINESS_EMAIL": settings.business_email,
@@ -238,7 +244,7 @@ def _verify_session(token: str) -> bool:
         return False
 
 
-def _build_email_body(booking: BookingRequest, price: int) -> str:
+def _build_email_body(booking: BookingRequest, price_cents: int) -> str:
     service_label = SERVICE_LABELS[booking.service_type]
     return (
         f"Booking confirmation - {settings.business_name}\n\n"
@@ -246,7 +252,7 @@ def _build_email_body(booking: BookingRequest, price: int) -> str:
         f"Customer phone: {booking.phone}\n"
         f"Customer email: {booking.email}\n"
         f"Service: {service_label}\n"
-        f"Price: AUD ${price}\n"
+        f"Price: AUD ${_format_aud(price_cents)}\n"
         f"Pickup: {booking.pickup_location}\n"
         f"Dropoff: {booking.dropoff_location}\n"
         f"Booked slot: {booking.preferred_time.strftime('%Y-%m-%d %H:%M')}\n"
@@ -541,18 +547,18 @@ def create_booking(booking: BookingRequest) -> BookingResponse:
         bookings.append(stored)
         _save_bookings(bookings)
 
-    price = PRICE_MAP[booking.service_type]
-    body = _build_email_body(booking, price)
+    price_cents = PRICE_MAP[booking.service_type]
+    body = _build_email_body(booking, price_cents)
 
     try:
         _send_email(
             str(booking.email),
-            f"Booking Confirmed - {settings.business_name} - AUD ${price}",
+            f"Booking Confirmed - {settings.business_name} - AUD ${_format_aud(price_cents)}",
             body,
         )
         _send_email(
             settings.business_email,
-            f"New Booking - {booking.full_name} - AUD ${price}",
+            f"New Booking - {booking.full_name} - AUD ${_format_aud(price_cents)}",
             body,
         )
     except Exception as exc:
@@ -564,7 +570,7 @@ def create_booking(booking: BookingRequest) -> BookingResponse:
     return BookingResponse(
         success=True,
         message="Booking received. Confirmation email sent.",
-        price_aud=price,
+        price_aud=price_cents / 100,
         booked_slot=key,
     )
 
@@ -605,7 +611,7 @@ async def create_checkout(booking: BookingRequest, request: Request):
         bookings.append(stored)
         _save_bookings(bookings)
 
-    price = PRICE_MAP[booking.service_type]
+    price_cents = PRICE_MAP[booking.service_type]
     service_label = SERVICE_LABELS[booking.service_type]
     base_url = str(request.base_url).rstrip("/")
 
@@ -619,7 +625,7 @@ async def create_checkout(booking: BookingRequest, request: Request):
                         "name": service_label,
                         "description": f"{booking.pickup_location} → {booking.dropoff_location}",
                     },
-                    "unit_amount": price * 100,
+                    "unit_amount": price_cents,
                 },
                 "quantity": 1,
             }],
@@ -668,7 +674,8 @@ def booking_success(session_id: str):
             booking.payment_status = "paid"
             _save_bookings(bookings)
             # Send confirmation emails
-            price = PRICE_MAP.get(booking.service_type, 0)
+            price_cents = PRICE_MAP.get(booking.service_type, 0)
+            price = _format_aud(price_cents)
             try:
                 from pydantic import TypeAdapter
                 email_validator = TypeAdapter(EmailStr)
@@ -677,7 +684,7 @@ def booking_success(session_id: str):
                     f"Booking confirmation — {settings.business_name}\n\n"
                     f"Customer: {booking.full_name}\n"
                     f"Service: {SERVICE_LABELS.get(booking.service_type, booking.service_type)}\n"
-                    f"Price: AUD ${price} (paid)\n"
+                    f"Price: AUD ${_format_aud(price_cents)} (paid)\n"
                     f"Pickup: {booking.pickup_location}\n"
                     f"Dropoff: {booking.dropoff_location}\n"
                     f"Booked slot: {booking.preferred_time}\n"
@@ -748,7 +755,7 @@ def public_config() -> dict[str, object]:
         "google_maps_api_key": settings.google_maps_api_key,
         "stripe_publishable_key": settings.stripe_publishable_key,
         "pricing": [
-            {"key": key, "label": SERVICE_LABELS[key], "price_aud": PRICE_MAP[key]}
+            {"key": key, "label": SERVICE_LABELS[key], "price_aud": PRICE_MAP[key] / 100}
             for key in PRICE_MAP
         ],
     }
