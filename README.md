@@ -15,7 +15,7 @@ Copy env values:
 Copy-Item .env.example .env
 ```
 
-Then update `.env` with your email + phone details.
+Then update `.env` with your email + phone details. For hosted deployments, prefer `RESEND_API_KEY` and `RESEND_FROM` over raw SMTP.
 
 ## Run
 

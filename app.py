@@ -16,7 +16,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Literal
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import stripe
 from dotenv import load_dotenv
@@ -49,6 +49,8 @@ class Settings:
     smtp_user: str = os.getenv("SMTP_USER", "")
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from: str = os.getenv("SMTP_FROM", "")
+    resend_api_key: str = os.getenv("RESEND_API_KEY", "")
+    resend_from: str = os.getenv("RESEND_FROM", "")
     google_maps_api_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
     driver_password: str = os.getenv("DRIVER_PASSWORD", "")
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -200,20 +202,48 @@ def _format_contact_line(phone: str, whatsapp_number: str) -> str:
 
 
 def _assert_email_ready() -> None:
-    required = {
-        "BUSINESS_EMAIL": settings.business_email,
-        "SMTP_HOST": settings.smtp_host,
-        "SMTP_USER": settings.smtp_user,
-        "SMTP_PASSWORD": settings.smtp_password,
-        "SMTP_FROM": settings.smtp_from,
-    }
+    required = {"BUSINESS_EMAIL": settings.business_email}
+    if settings.resend_api_key:
+        required["RESEND_FROM"] = settings.resend_from
+    else:
+        required["SMTP_HOST"] = settings.smtp_host
+        required["SMTP_USER"] = settings.smtp_user
+        required["SMTP_PASSWORD"] = settings.smtp_password
+        required["SMTP_FROM"] = settings.smtp_from
     missing = [key for key, value in required.items() if not value]
     if missing:
         joined = ", ".join(missing)
         raise RuntimeError(f"Email is not configured. Missing: {joined}")
 
 
+def _send_email_via_resend(to_address: str, subject: str, body: str) -> None:
+    payload = json.dumps(
+        {
+            "from": settings.resend_from,
+            "to": [to_address],
+            "subject": subject,
+            "text": body,
+        }
+    ).encode("utf-8")
+    request = Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {settings.resend_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=30) as response:
+        if response.status >= 400:
+            raise RuntimeError(f"Resend request failed with status {response.status}")
+
+
 def _send_email(to_address: str, subject: str, body: str) -> None:
+    if settings.resend_api_key:
+        _send_email_via_resend(to_address, subject, body)
+        return
+
     message = EmailMessage()
     message["From"] = settings.smtp_from
     message["To"] = to_address
