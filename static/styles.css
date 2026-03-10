@@ -300,6 +300,16 @@ button:disabled {
   margin: 0;
 }
 
+.slot-banner {
+  background: #e6f4ea;
+  border: 1px solid #a8d5b0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  color: #1a5c2a;
+  font-size: 15px;
+}
+
 gmp-place-autocomplete {
   display: block;
   width: 100%;

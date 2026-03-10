@@ -18,21 +18,21 @@
         <p class="lead">Book online in under two minutes. We use a passenger car — up to 4 people, or packages up to 100&nbsp;kg (under 20&nbsp;kg each, boot-fit only). Same-day Gold Coast runs and Gold Coast to Brisbane lifts or deliveries.</p>
       </div>
       <div class="hero-image">
-        <img src="https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=1200&q=80" alt="Car driving on Gold Coast road" />
+        <img src="https://images.unsplash.com/photo-1568702846914-96b305d2aaeb?auto=format&fit=crop&w=1200&q=80" alt="Delivery driver at doorstep" />
       </div>
     </section>
 
     <section class="photo-grid" aria-label="Service photos">
       <article class="photo-card">
-        <img src="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=900&q=80" alt="Passenger car for local Gold Coast delivery" />
+        <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=900&q=80" alt="Delivery driver with parcel" />
         <p>$30 · Gold Coast local — same day</p>
       </article>
       <article class="photo-card">
-        <img src="https://images.unsplash.com/photo-1449965408869-eaa3f722e8f8?auto=format&fit=crop&w=900&q=80" alt="Car ready for a direct now delivery" />
+        <img src="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=900&q=80" alt="Sedan car ready for service" />
         <p>$60 · Direct now service</p>
       </article>
       <article class="photo-card">
-        <img src="https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=900&q=80" alt="Car on highway for Gold Coast to Brisbane run" />
+        <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80" alt="Gold Coast beach and skyline" />
         <p>$60 · Gold Coast to Brisbane</p>
       </article>
     </section>
@@ -50,8 +50,9 @@
 
     <form id="bookingForm" class="grid">
       <label>Selected slot
-        <input id="slotDisplay" readonly placeholder="Select an available slot from the calendar" />
+        <input id="slotDisplay" readonly placeholder="👇 Tap to pick a slot from the calendar below" style="cursor:pointer" />
       </label>
+      <div id="slotBanner" style="display:none" class="slot-banner"></div>
       <input type="hidden" name="preferred_time" id="preferredTime" />
 
       <label>Full name
@@ -109,6 +110,7 @@
     <div id="result" class="result" style="display:none"></div>
     <div id="error" class="error" style="display:none"></div>
     <p class="phone">Business phone: <span id="bizPhone">0400 000 000</span></p>
+    <p style="text-align:center;margin-top:8px"><a href="/login" style="font-size:12px;color:#aaa;text-decoration:none">Driver login</a></p>
   </main>
 
   <script>
@@ -116,6 +118,7 @@
     const calendarGrid = document.getElementById("calendarGrid");
     const preferredTime = document.getElementById("preferredTime");
     const slotDisplay = document.getElementById("slotDisplay");
+    const slotBanner = document.getElementById("slotBanner");
     const result = document.getElementById("result");
     const errorBox = document.getElementById("error");
     const submitBtn = document.getElementById("submitBtn");
@@ -184,14 +187,23 @@
       errorBox.style.display = "none";
     }
 
+    slotDisplay.addEventListener("click", () => {
+      document.querySelector(".calendar-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
     function setSelectedSlot(isoTime, label) {
       selectedSlot = isoTime;
       selectedSlotLabel = label;
       preferredTime.value = isoTime;
       slotDisplay.value = label;
+      slotBanner.textContent = "✅ Slot selected: " + label;
+      slotBanner.style.display = "block";
       document.querySelectorAll(".slot-btn.selected").forEach((n) => n.classList.remove("selected"));
       const selected = document.querySelector(`button[data-slot="${isoTime}"]`);
       if (selected) selected.classList.add("selected");
+      setTimeout(() => {
+        document.getElementById("bookingForm").scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 300);
     }
 
     async function loadPublicConfig() {
@@ -393,6 +405,7 @@
         selectedSlotLabel = "";
         preferredTime.value = "";
         slotDisplay.value = "";
+        slotBanner.style.display = "none";
         pickupLocation.value = "";
         dropoffLocation.value = "";
         pickupPlaceId.value = "";
