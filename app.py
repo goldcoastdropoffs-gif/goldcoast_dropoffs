@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import secrets
 import smtplib
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email import encoders as email_encoders
 from pathlib import Path
 from threading import Lock
 from typing import Literal
@@ -13,10 +19,11 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Cookie, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from itsdangerous import URLSafeTimedSerializer
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -42,9 +49,12 @@ class Settings:
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from: str = os.getenv("SMTP_FROM", "")
     google_maps_api_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    driver_password: str = os.getenv("DRIVER_PASSWORD", "")
+    secret_key: str = os.getenv("SECRET_KEY", "dev-secret-change-me")
 
 
 settings = Settings()
+signer = URLSafeTimedSerializer(settings.secret_key)
 
 ServiceType = Literal["gold_coast", "direct", "gc_to_brisbane"]
 
@@ -108,6 +118,15 @@ class StoredBooking:
     dropoff_location: str
     preferred_time: str
     notes: str
+    booking_id: str = ""
+    status: str = "pending"  # pending, picked_up, delivered
+    picked_up_at: str = ""
+    delivered_at: str = ""
+
+
+def _make_booking_id(item: dict) -> str:
+    key = (item.get("created_at", "") + item.get("email", "")).encode()
+    return hashlib.md5(key).hexdigest()[:12]
 
 
 def _load_bookings() -> list[StoredBooking]:
@@ -119,6 +138,10 @@ def _load_bookings() -> list[StoredBooking]:
     data = json.loads(raw)
     out: list[StoredBooking] = []
     for item in data:
+        item.setdefault("booking_id", _make_booking_id(item))
+        item.setdefault("status", "pending")
+        item.setdefault("picked_up_at", "")
+        item.setdefault("delivered_at", "")
         out.append(StoredBooking(**item))
     return out
 
@@ -174,6 +197,36 @@ def _send_email(to_address: str, subject: str, body: str) -> None:
         smtp.starttls()
         smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(message)
+
+
+def _send_email_with_photo(to_address: str, subject: str, body: str, photo_data: bytes, photo_filename: str, content_type: str) -> None:
+    msg = MIMEMultipart()
+    msg["From"] = settings.smtp_from
+    msg["To"] = to_address
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+    maintype, subtype = (content_type.split("/", 1) if "/" in content_type else ("image", "jpeg"))
+    part = MIMEBase(maintype, subtype)
+    part.set_payload(photo_data)
+    email_encoders.encode_base64(part)
+    part.add_header("Content-Disposition", f'attachment; filename="{photo_filename}"')
+    msg.attach(part)
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
+        smtp.starttls()
+        smtp.login(settings.smtp_user, settings.smtp_password)
+        smtp.sendmail(settings.smtp_from, to_address, msg.as_string())
+
+
+def _make_session_token() -> str:
+    return signer.dumps("driver")
+
+
+def _verify_session(token: str) -> bool:
+    try:
+        signer.loads(token, max_age=86400 * 14)
+        return True
+    except Exception:
+        return False
 
 
 def _build_email_body(booking: BookingRequest, price: int) -> str:
@@ -275,6 +328,147 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
+@app.get("/login", response_class=HTMLResponse)
+def login_page() -> HTMLResponse:
+    html = (BASE_DIR / "templates" / "login.html").read_text(encoding="utf-8")
+    return HTMLResponse(html)
+
+
+@app.post("/login")
+def do_login(password: str = Form(...)):
+    if not settings.driver_password:
+        raise HTTPException(status_code=500, detail="Driver password not configured.")
+    if not secrets.compare_digest(password, settings.driver_password):
+        return RedirectResponse("/login?error=1", status_code=302)
+    token = _make_session_token()
+    response = RedirectResponse("/driver", status_code=302)
+    response.set_cookie("driver_session", token, httponly=True, samesite="lax", max_age=86400 * 14)
+    return response
+
+
+@app.get("/logout")
+def logout():
+    response = RedirectResponse("/login", status_code=302)
+    response.delete_cookie("driver_session")
+    return response
+
+
+@app.get("/driver", response_class=HTMLResponse)
+def driver_dashboard(driver_session: str | None = Cookie(default=None)):
+    if not driver_session or not _verify_session(driver_session):
+        return RedirectResponse("/login", status_code=302)
+    html = (BASE_DIR / "templates" / "driver.html").read_text(encoding="utf-8")
+    return HTMLResponse(html)
+
+
+@app.get("/api/driver/bookings")
+def driver_bookings(driver_session: str | None = Cookie(default=None)):
+    if not driver_session or not _verify_session(driver_session):
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+    return {"bookings": [asdict(b) for b in bookings]}
+
+
+@app.post("/api/driver/pickup/{booking_id}")
+async def mark_pickup(
+    booking_id: str,
+    photo: UploadFile = File(...),
+    driver_session: str | None = Cookie(default=None),
+):
+    if not driver_session or not _verify_session(driver_session):
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    photo_data = await photo.read()
+    now = datetime.now()
+    now_str = now.isoformat(timespec="seconds")
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        booking = next((b for b in bookings if b.booking_id == booking_id), None)
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        if booking.status != "pending":
+            raise HTTPException(status_code=400, detail="Booking already picked up.")
+        booking.status = "picked_up"
+        booking.picked_up_at = now_str
+        _save_bookings(bookings)
+    time_str = now.strftime("%I:%M %p")
+    date_str = now.strftime("%a %d %b %Y")
+    body = (
+        f"Hi {booking.full_name},\n\n"
+        f"Your item has been picked up at {time_str} on {date_str}.\n"
+        f"From: {booking.pickup_location}\n"
+        f"To: {booking.dropoff_location}\n\n"
+        f"Photo proof of pickup is attached.\n\n"
+        f"Questions? Call us: {settings.business_phone}\n"
+        f"{settings.business_name}"
+    )
+    try:
+        _send_email_with_photo(
+            booking.email,
+            f"Your item has been picked up — {settings.business_name}",
+            body, photo_data, f"pickup_{booking_id}.jpg",
+            photo.content_type or "image/jpeg",
+        )
+    except Exception as exc:
+        return {"success": True, "picked_up_at": now_str, "email_warning": str(exc)}
+    return {"success": True, "picked_up_at": now_str}
+
+
+@app.post("/api/driver/dropoff/{booking_id}")
+async def mark_dropoff(
+    booking_id: str,
+    photo: UploadFile = File(...),
+    driver_session: str | None = Cookie(default=None),
+):
+    if not driver_session or not _verify_session(driver_session):
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    photo_data = await photo.read()
+    now = datetime.now()
+    now_str = now.isoformat(timespec="seconds")
+    duration_str = ""
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        booking = next((b for b in bookings if b.booking_id == booking_id), None)
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        if booking.status == "delivered":
+            raise HTTPException(status_code=400, detail="Booking already delivered.")
+        booking.status = "delivered"
+        booking.delivered_at = now_str
+        if booking.picked_up_at:
+            try:
+                pickup_dt = datetime.fromisoformat(booking.picked_up_at)
+                delta = now - pickup_dt
+                total_minutes = int(delta.total_seconds() / 60)
+                hours, mins = divmod(total_minutes, 60)
+                duration_str = f"{hours}h {mins}m" if hours else f"{total_minutes} min"
+            except Exception:
+                pass
+        _save_bookings(bookings)
+    time_str = now.strftime("%I:%M %p")
+    date_str = now.strftime("%a %d %b %Y")
+    body = (
+        f"Hi {booking.full_name},\n\n"
+        f"Your item has been delivered at {time_str} on {date_str}.\n"
+        f"From: {booking.pickup_location}\n"
+        f"To: {booking.dropoff_location}\n"
+        + (f"Trip duration: {duration_str}\n" if duration_str else "")
+        + f"\nPhoto proof of delivery is attached.\n\n"
+        f"Thank you for using {settings.business_name}!\n"
+        f"Questions? Call us: {settings.business_phone}"
+    )
+    try:
+        _send_email_with_photo(
+            booking.email,
+            f"Your item has been delivered — {settings.business_name}",
+            body, photo_data, f"delivery_{booking_id}.jpg",
+            photo.content_type or "image/jpeg",
+        )
+    except Exception as exc:
+        return {"success": True, "delivered_at": now_str, "duration": duration_str, "email_warning": str(exc)}
+    return {"success": True, "delivered_at": now_str, "duration": duration_str}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
     html = (BASE_DIR / "templates" / "index.html").read_text(encoding="utf-8")
@@ -309,6 +503,7 @@ def create_booking(booking: BookingRequest) -> BookingResponse:
         if key in _booked_slot_keys(bookings):
             raise HTTPException(status_code=409, detail="Selected slot is already booked. Please choose another slot.")
 
+        booking_id = hashlib.md5(f"{datetime.now().isoformat()}{booking.email}".encode()).hexdigest()[:12]
         stored = StoredBooking(
             created_at=datetime.now().isoformat(timespec="seconds"),
             full_name=booking.full_name,
@@ -319,6 +514,7 @@ def create_booking(booking: BookingRequest) -> BookingResponse:
             dropoff_location=booking.dropoff_location,
             preferred_time=key,
             notes=booking.notes,
+            booking_id=booking_id,
         )
         bookings.append(stored)
         _save_bookings(bookings)

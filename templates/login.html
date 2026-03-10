@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-a: #fff4e9;
+      --bg-b: #e9f4ff;
+      --surface: #ffffff;
+      --ink: #11243a;
+      --muted: #51657f;
+      --line: #d9e6f7;
+      --brand: #0a6ed1;
+      --brand-2: #ff7a1a;
+      --brand-soft: #eaf4ff;
+      --ok-bg: #e9fbef;
+      --ok-border: #beedcc;
+      --err-bg: #ffe9e9;
+      --err-border: #f1b8b8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Manrope, "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, #fff9f3 0%, transparent 40%),
+        radial-gradient(circle at 90% 0%, #eff7ff 0%, transparent 44%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+      padding: 16px;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid #dfe9f8;
+      border-radius: 20px;
+      padding: 40px 32px;
+      box-shadow: 0 20px 48px rgba(8, 36, 68, 0.12);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-icon {
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, var(--brand), #2f8be3);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+
+    h1 {
+      font-family: Sora, Manrope, Arial, sans-serif;
+      margin: 0 0 6px;
+      font-size: 26px;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin: 0 0 28px;
+      font-size: 14px;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    label span {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input[type="password"] {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid #c8d8ee;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 16px;
+    }
+
+    input[type="password"]:focus {
+      outline: 2px solid #b8d9ff;
+      border-color: #9fc9fb;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 13px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 800;
+      font-size: 16px;
+      background: linear-gradient(120deg, var(--brand), #2f8be3);
+      color: #fff;
+      margin-top: 8px;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    button[type="submit"]:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(25, 108, 193, 0.28);
+    }
+
+    .error-msg {
+      background: var(--err-bg);
+      border: 1px solid var(--err-border);
+      color: #7b1616;
+      border-radius: 10px;
+      padding: 11px 14px;
+      margin-bottom: 20px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 24px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .back-link:hover {
+      color: var(--brand);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-icon">🚗</div>
+    <h1>Driver Login</h1>
+    <p class="subtitle">Enter your password to access the driver dashboard.</p>
+
+    <div id="errorMsg" class="error-msg" style="display:none">
+      Incorrect password. Please try again.
+    </div>
+
+    <form method="POST" action="/login">
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" required autofocus autocomplete="current-password" placeholder="Enter driver password" />
+      </label>
+      <button type="submit">Login</button>
+    </form>
+
+    <a href="/" class="back-link">← Back to booking site</a>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "1") {
+      document.getElementById("errorMsg").style.display = "block";
+    }
+  </script>
+</body>
+</html>

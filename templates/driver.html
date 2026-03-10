@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-a: #fff4e9;
+      --bg-b: #e9f4ff;
+      --surface: #ffffff;
+      --ink: #11243a;
+      --muted: #51657f;
+      --line: #d9e6f7;
+      --brand: #0a6ed1;
+      --brand-2: #ff7a1a;
+      --brand-soft: #eaf4ff;
+      --ok-bg: #e9fbef;
+      --ok-border: #beedcc;
+      --err-bg: #ffe9e9;
+      --err-border: #f1b8b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Manrope, "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, #fff9f3 0%, transparent 40%),
+        radial-gradient(circle at 90% 0%, #eff7ff 0%, transparent 44%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(8, 36, 68, 0.08);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--brand), #2f8be3);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-family: Sora, Manrope, Arial, sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .header-sub {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      margin-top: 1px;
+    }
+
+    .logout-btn {
+      background: #f4f7fc;
+      border: 1px solid #d2dff0;
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font: inherit;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.12s;
+    }
+
+    .logout-btn:hover {
+      background: #e8eef8;
+    }
+
+    /* ── Main content ── */
+    .main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+    }
+
+    /* ── Date nav ── */
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .date-nav input[type="date"] {
+      flex: 1;
+      padding: 11px 14px;
+      border: 1px solid #c8d8ee;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      background: var(--surface);
+    }
+
+    .date-nav input[type="date"]:focus {
+      outline: 2px solid #b8d9ff;
+      border-color: #9fc9fb;
+    }
+
+    .nav-btn {
+      width: 44px;
+      height: 44px;
+      border: 1px solid #c8d8ee;
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.12s, transform 0.1s;
+      padding: 0;
+    }
+
+    .nav-btn:hover {
+      background: var(--brand-soft);
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .summary-chip {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 10px;
+      text-align: center;
+    }
+
+    .summary-chip .chip-num {
+      font-family: Sora, Manrope, Arial, sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .summary-chip .chip-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .chip-total .chip-num { color: var(--ink); }
+    .chip-pending .chip-num { color: var(--brand); }
+    .chip-pickup .chip-num { color: var(--brand-2); }
+    .chip-delivered .chip-num { color: #1a8a45; }
+
+    /* ── Section heading ── */
+    .day-heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .day-heading h2 {
+      font-family: Sora, Manrope, Arial, sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .count-badge {
+      background: var(--brand);
+      color: #fff;
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty-state .empty-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .empty-state p {
+      font-weight: 600;
+    }
+
+    /* ── Booking cards ── */
+    .booking-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 14px;
+      position: relative;
+    }
+
+    .booking-card.status-pending {
+      border-left: 4px solid var(--brand);
+    }
+
+    .booking-card.status-picked_up {
+      border-left: 4px solid var(--brand-2);
+    }
+
+    .booking-card.status-delivered {
+      border-left: 4px solid #1a8a45;
+      opacity: 0.85;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .card-time {
+      font-family: Sora, Manrope, Arial, sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--brand);
+      line-height: 1;
+    }
+
+    .status-badge {
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .badge-pending {
+      background: var(--brand-soft);
+      color: var(--brand);
+      border: 1px solid #c2d9f7;
+    }
+
+    .badge-picked_up {
+      background: #fff3e8;
+      color: #b85000;
+      border: 1px solid #ffd3a8;
+    }
+
+    .badge-delivered {
+      background: var(--ok-bg);
+      color: #1a5c34;
+      border: 1px solid var(--ok-border);
+    }
+
+    .card-customer {
+      font-size: 17px;
+      font-weight: 800;
+      margin-bottom: 2px;
+    }
+
+    .card-phone {
+      font-size: 15px;
+      color: var(--brand);
+      font-weight: 700;
+      text-decoration: none;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+
+    .card-phone:hover {
+      text-decoration: underline;
+    }
+
+    .card-service {
+      display: inline-block;
+      background: #f0f6ff;
+      border: 1px solid #d0e4ff;
+      border-radius: 8px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #244a7c;
+      margin-bottom: 12px;
+    }
+
+    .card-price {
+      display: inline-block;
+      background: #fff3e8;
+      border: 1px solid #ffd3a8;
+      border-radius: 8px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #8a3d00;
+      margin-bottom: 12px;
+      margin-left: 6px;
+    }
+
+    .route {
+      background: #f7f9fc;
+      border: 1px solid #e2ebf7;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+
+    .route-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .route-row + .route-row {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #e2ebf7;
+    }
+
+    .route-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .route-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 2px;
+    }
+
+    .route-addr {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .notes-block {
+      background: #fffbf5;
+      border: 1px solid #ffe8cc;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #5a3a12;
+      margin-bottom: 12px;
+    }
+
+    /* ── Timeline info ── */
+    .timeline-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .timeline-chip {
+      background: #f4f7fc;
+      border: 1px solid #dce9f7;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .timeline-chip.orange {
+      background: #fff3e8;
+      border-color: #ffd3a8;
+      color: #8a4300;
+    }
+
+    .timeline-chip.green {
+      background: var(--ok-bg);
+      border-color: var(--ok-border);
+      color: #1a5c34;
+    }
+
+    /* ── Action area ── */
+    .action-area {
+      margin-top: 4px;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font: inherit;
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-pickup {
+      background: linear-gradient(120deg, var(--brand), #2f8be3);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(10, 110, 209, 0.25);
+    }
+
+    .btn-pickup:hover {
+      box-shadow: 0 8px 20px rgba(10, 110, 209, 0.35);
+    }
+
+    .btn-dropoff {
+      background: linear-gradient(120deg, var(--brand-2), #ff9a50);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(255, 122, 26, 0.25);
+    }
+
+    .btn-dropoff:hover {
+      box-shadow: 0 8px 20px rgba(255, 122, 26, 0.35);
+    }
+
+    /* ── Photo preview ── */
+    .photo-preview-area {
+      margin-top: 14px;
+      display: none;
+    }
+
+    .photo-preview-area.visible {
+      display: block;
+    }
+
+    .photo-preview-img {
+      width: 100%;
+      max-height: 260px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 2px solid #d0e4ff;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .confirm-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font: inherit;
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+      background: linear-gradient(120deg, #1a8a45, #22b05a);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(26, 138, 69, 0.3);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+
+    .confirm-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(26, 138, 69, 0.4);
+    }
+
+    .confirm-btn:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* ── Upload feedback ── */
+    .upload-status {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      display: none;
+    }
+
+    .upload-status.loading {
+      display: block;
+      background: var(--brand-soft);
+      border: 1px solid #c2d9f7;
+      color: #124a8f;
+    }
+
+    .upload-status.success {
+      display: block;
+      background: var(--ok-bg);
+      border: 1px solid var(--ok-border);
+      color: #1a5c34;
+    }
+
+    .upload-status.error {
+      display: block;
+      background: var(--err-bg);
+      border: 1px solid var(--err-border);
+      color: #7b1616;
+    }
+
+    /* ── Loading screen ── */
+    .page-loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #dde8f7;
+      border-top-color: var(--brand);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 500px) {
+      .summary-bar {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .card-time {
+        font-size: 17px;
+      }
+    }
+
+    /* Prevent default button styles from the global sheet */
+    button { font: inherit; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <div class="header-icon">🚗</div>
+      <div>
+        <div class="header h1" id="bizName" style="font-family: Sora, Manrope, Arial, sans-serif; font-size:17px; font-weight:800;">Driver Dashboard</div>
+        <div class="header-sub">Bookings overview</div>
+      </div>
+    </div>
+    <a href="/logout" class="logout-btn">Logout</a>
+  </header>
+
+  <main class="main">
+    <div id="pageLoading" class="page-loading">
+      <div class="spinner"></div>
+      <p>Loading bookings...</p>
+    </div>
+
+    <div id="pageContent" style="display:none">
+      <!-- Date navigation -->
+      <div class="date-nav">
+        <button class="nav-btn" id="prevDay" title="Previous day">&#8592;</button>
+        <input type="date" id="datePicker" />
+        <button class="nav-btn" id="nextDay" title="Next day">&#8594;</button>
+      </div>
+
+      <!-- Summary chips -->
+      <div class="summary-bar">
+        <div class="summary-chip chip-total">
+          <div class="chip-num" id="sumTotal">0</div>
+          <div class="chip-label">Total</div>
+        </div>
+        <div class="summary-chip chip-pending">
+          <div class="chip-num" id="sumPending">0</div>
+          <div class="chip-label">Pending</div>
+        </div>
+        <div class="summary-chip chip-pickup">
+          <div class="chip-num" id="sumPickup">0</div>
+          <div class="chip-label">Picked Up</div>
+        </div>
+        <div class="summary-chip chip-delivered">
+          <div class="chip-num" id="sumDelivered">0</div>
+          <div class="chip-label">Delivered</div>
+        </div>
+      </div>
+
+      <!-- Day heading -->
+      <div class="day-heading">
+        <h2 id="dayHeadingText">Today</h2>
+        <span class="count-badge" id="countBadge">0</span>
+      </div>
+
+      <!-- Booking list -->
+      <div id="bookingList"></div>
+    </div>
+  </main>
+
+  <!-- Hidden file inputs (one for pickup, one for dropoff) -->
+  <input type="file" id="fileInputPickup" accept="image/*" capture="environment" style="display:none" />
+  <input type="file" id="fileInputDropoff" accept="image/*" capture="environment" style="display:none" />
+
+  <script>
+    // ── State ──────────────────────────────────────────────────────────────
+    let allBookings = [];
+    let currentDate = todayString();
+    let pendingAction = null; // { bookingId, type: 'pickup'|'dropoff', cardEl }
+
+    function todayString() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    // ── Service label map ──────────────────────────────────────────────────
+    const SERVICE_LABELS = {
+      gold_coast: "Gold Coast local",
+      direct: "Direct now",
+      gc_to_brisbane: "GC → Brisbane",
+    };
+    const PRICE_MAP = { gold_coast: 30, direct: 60, gc_to_brisbane: 60 };
+
+    // ── Formatting helpers ─────────────────────────────────────────────────
+    function formatTime(isoString) {
+      // isoString is like "2024-03-10T09:00" or "2024-03-10T09:00:00"
+      try {
+        const d = new Date(isoString);
+        return d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true });
+      } catch {
+        return isoString;
+      }
+    }
+
+    function formatDateTime(isoString) {
+      if (!isoString) return "";
+      try {
+        const d = new Date(isoString);
+        return d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true });
+      } catch {
+        return isoString;
+      }
+    }
+
+    function calcDuration(pickedUpAt, deliveredAt) {
+      if (!pickedUpAt || !deliveredAt) return "";
+      try {
+        const diffMs = new Date(deliveredAt) - new Date(pickedUpAt);
+        if (diffMs < 0) return "";
+        const totalMins = Math.round(diffMs / 60000);
+        const hours = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
+        return hours > 0 ? `${hours}h ${mins}m` : `${totalMins} min`;
+      } catch {
+        return "";
+      }
+    }
+
+    function formatDateHeading(dateStr) {
+      const today = todayString();
+      const tomorrow = (() => {
+        const d = new Date(today);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().slice(0, 10);
+      })();
+      if (dateStr === today) return "Today";
+      if (dateStr === tomorrow) return "Tomorrow";
+      try {
+        const d = new Date(dateStr + "T00:00:00");
+        return d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    // ── Load bookings ──────────────────────────────────────────────────────
+    async function loadBookings() {
+      try {
+        const res = await fetch("/api/driver/bookings");
+        if (!res.ok) throw new Error("Failed to load.");
+        const data = await res.json();
+        allBookings = data.bookings || [];
+        renderPage();
+      } catch (err) {
+        document.getElementById("pageLoading").innerHTML =
+          `<p style="color:#7b1616; font-weight:700;">Failed to load bookings: ${err.message}</p>`;
+      }
+    }
+
+    // ── Filter and sort for selected date ─────────────────────────────────
+    function getBookingsForDate(dateStr) {
+      return allBookings
+        .filter(b => (b.preferred_time || "").startsWith(dateStr))
+        .sort((a, b) => (a.preferred_time || "").localeCompare(b.preferred_time || ""));
+    }
+
+    // ── Render page ────────────────────────────────────────────────────────
+    function renderPage() {
+      document.getElementById("pageLoading").style.display = "none";
+      document.getElementById("pageContent").style.display = "block";
+      document.getElementById("datePicker").value = currentDate;
+
+      const dayBookings = getBookingsForDate(currentDate);
+      const pending = dayBookings.filter(b => b.status === "pending").length;
+      const pickedUp = dayBookings.filter(b => b.status === "picked_up").length;
+      const delivered = dayBookings.filter(b => b.status === "delivered").length;
+
+      document.getElementById("sumTotal").textContent = dayBookings.length;
+      document.getElementById("sumPending").textContent = pending;
+      document.getElementById("sumPickup").textContent = pickedUp;
+      document.getElementById("sumDelivered").textContent = delivered;
+      document.getElementById("countBadge").textContent = dayBookings.length;
+      document.getElementById("dayHeadingText").textContent = formatDateHeading(currentDate);
+
+      const list = document.getElementById("bookingList");
+      list.innerHTML = "";
+
+      if (dayBookings.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>No bookings for this day.</p>
+          </div>`;
+        return;
+      }
+
+      for (const booking of dayBookings) {
+        list.appendChild(buildCard(booking));
+      }
+    }
+
+    // ── Build a booking card ───────────────────────────────────────────────
+    function buildCard(booking) {
+      const card = document.createElement("div");
+      card.className = `booking-card status-${booking.status}`;
+      card.dataset.bookingId = booking.booking_id;
+
+      const badgeClass = `badge-${booking.status}`;
+      const badgeLabel = booking.status === "pending" ? "Pending"
+        : booking.status === "picked_up" ? "Picked Up"
+        : "Delivered";
+
+      const serviceLabel = SERVICE_LABELS[booking.service_type] || booking.service_type;
+      const price = PRICE_MAP[booking.service_type] || "?";
+      const timeLabel = formatTime(booking.preferred_time);
+
+      // Timeline info
+      let timelineHtml = "";
+      if (booking.status === "picked_up" && booking.picked_up_at) {
+        timelineHtml = `
+          <div class="timeline-info">
+            <span class="timeline-chip orange">Picked up: ${formatDateTime(booking.picked_up_at)}</span>
+          </div>`;
+      } else if (booking.status === "delivered") {
+        const duration = calcDuration(booking.picked_up_at, booking.delivered_at);
+        timelineHtml = `
+          <div class="timeline-info">
+            ${booking.picked_up_at ? `<span class="timeline-chip orange">Picked up: ${formatDateTime(booking.picked_up_at)}</span>` : ""}
+            ${booking.delivered_at ? `<span class="timeline-chip green">Delivered: ${formatDateTime(booking.delivered_at)}</span>` : ""}
+            ${duration ? `<span class="timeline-chip green">Duration: ${duration}</span>` : ""}
+          </div>`;
+      }
+
+      // Notes
+      const notesHtml = booking.notes
+        ? `<div class="notes-block">📝 ${escapeHtml(booking.notes)}</div>`
+        : "";
+
+      // Action area
+      let actionHtml = "";
+      if (booking.status === "pending") {
+        actionHtml = `
+          <div class="action-area">
+            <button class="action-btn btn-pickup" data-action="pickup" data-id="${booking.booking_id}">
+              📷 Mark Picked Up
+            </button>
+            <div class="photo-preview-area" id="preview-pickup-${booking.booking_id}">
+              <img class="photo-preview-img" src="" alt="Pickup photo preview" />
+              <button class="confirm-btn" id="confirmPickup-${booking.booking_id}">Confirm &amp; Send</button>
+            </div>
+            <div class="upload-status" id="status-${booking.booking_id}"></div>
+          </div>`;
+      } else if (booking.status === "picked_up") {
+        actionHtml = `
+          <div class="action-area">
+            <button class="action-btn btn-dropoff" data-action="dropoff" data-id="${booking.booking_id}">
+              📷 Mark Delivered
+            </button>
+            <div class="photo-preview-area" id="preview-dropoff-${booking.booking_id}">
+              <img class="photo-preview-img" src="" alt="Delivery photo preview" />
+              <button class="confirm-btn" id="confirmDropoff-${booking.booking_id}">Confirm &amp; Send</button>
+            </div>
+            <div class="upload-status" id="status-${booking.booking_id}"></div>
+          </div>`;
+      }
+
+      card.innerHTML = `
+        <div class="card-top">
+          <div class="card-time">${escapeHtml(timeLabel)}</div>
+          <span class="status-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div class="card-customer">${escapeHtml(booking.full_name)}</div>
+        <a href="tel:${escapeHtml(booking.phone)}" class="card-phone">${escapeHtml(booking.phone)}</a>
+        <div>
+          <span class="card-service">${escapeHtml(serviceLabel)}</span>
+          <span class="card-price">AUD $${price}</span>
+        </div>
+        <div class="route">
+          <div class="route-row">
+            <span class="route-icon">📍</span>
+            <div>
+              <div class="route-label">Pickup</div>
+              <div class="route-addr">${escapeHtml(booking.pickup_location)}</div>
+            </div>
+          </div>
+          <div class="route-row">
+            <span class="route-icon">🏁</span>
+            <div>
+              <div class="route-label">Dropoff</div>
+              <div class="route-addr">${escapeHtml(booking.dropoff_location)}</div>
+            </div>
+          </div>
+        </div>
+        ${notesHtml}
+        ${timelineHtml}
+        ${actionHtml}
+      `;
+
+      return card;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // ── Action button delegation ───────────────────────────────────────────
+    document.getElementById("bookingList").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action; // 'pickup' or 'dropoff'
+      const bookingId = btn.dataset.id;
+
+      // Store pending action
+      pendingAction = { bookingId, type: action };
+
+      // Trigger the correct file input
+      if (action === "pickup") {
+        document.getElementById("fileInputPickup").value = "";
+        document.getElementById("fileInputPickup").dataset.bookingId = bookingId;
+        document.getElementById("fileInputPickup").click();
+      } else {
+        document.getElementById("fileInputDropoff").value = "";
+        document.getElementById("fileInputDropoff").dataset.bookingId = bookingId;
+        document.getElementById("fileInputDropoff").click();
+      }
+    });
+
+    // ── File selected → show preview ───────────────────────────────────────
+    function handleFileSelect(fileInput, actionType) {
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const bookingId = fileInput.dataset.bookingId;
+        const previewArea = document.getElementById(`preview-${actionType}-${bookingId}`);
+        const imgEl = previewArea.querySelector(".photo-preview-img");
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          imgEl.src = ev.target.result;
+          previewArea.classList.add("visible");
+        };
+        reader.readAsDataURL(file);
+
+        // Wire confirm button
+        const confirmBtnId = actionType === "pickup"
+          ? `confirmPickup-${bookingId}`
+          : `confirmDropoff-${bookingId}`;
+        const confirmBtn = document.getElementById(confirmBtnId);
+        // Remove old listener by cloning
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+        newConfirmBtn.addEventListener("click", () => {
+          uploadPhoto(bookingId, actionType, file, previewArea, newConfirmBtn);
+        });
+      });
+    }
+
+    handleFileSelect(document.getElementById("fileInputPickup"), "pickup");
+    handleFileSelect(document.getElementById("fileInputDropoff"), "dropoff");
+
+    // ── Upload photo ───────────────────────────────────────────────────────
+    async function uploadPhoto(bookingId, actionType, file, previewArea, confirmBtn) {
+      const statusEl = document.getElementById(`status-${bookingId}`);
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Uploading...";
+      statusEl.className = "upload-status loading";
+      statusEl.textContent = "Uploading photo and updating status...";
+      statusEl.style.display = "block";
+
+      const endpoint = actionType === "pickup"
+        ? `/api/driver/pickup/${bookingId}`
+        : `/api/driver/dropoff/${bookingId}`;
+
+      const formData = new FormData();
+      formData.append("photo", file);
+
+      try {
+        const res = await fetch(endpoint, { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Upload failed.");
+        }
+
+        statusEl.className = "upload-status success";
+        if (data.email_warning) {
+          statusEl.textContent = `Status updated! (Note: email could not be sent: ${data.email_warning})`;
+        } else {
+          statusEl.textContent = actionType === "pickup"
+            ? "Picked up! Customer notified by email."
+            : "Delivered! Customer notified by email.";
+        }
+
+        // Refresh bookings after a short pause
+        setTimeout(async () => {
+          await loadBookings();
+        }, 1200);
+
+      } catch (err) {
+        statusEl.className = "upload-status error";
+        statusEl.textContent = `Error: ${err.message}`;
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Confirm & Send";
+      }
+    }
+
+    // ── Date navigation ────────────────────────────────────────────────────
+    const datePicker = document.getElementById("datePicker");
+    datePicker.value = currentDate;
+
+    datePicker.addEventListener("change", () => {
+      currentDate = datePicker.value;
+      renderPage();
+    });
+
+    document.getElementById("prevDay").addEventListener("click", () => {
+      const d = new Date(currentDate + "T00:00:00");
+      d.setDate(d.getDate() - 1);
+      currentDate = d.toISOString().slice(0, 10);
+      renderPage();
+    });
+
+    document.getElementById("nextDay").addEventListener("click", () => {
+      const d = new Date(currentDate + "T00:00:00");
+      d.setDate(d.getDate() + 1);
+      currentDate = d.toISOString().slice(0, 10);
+      renderPage();
+    });
+
+    // ── Load business name from public config ──────────────────────────────
+    async function loadConfig() {
+      try {
+        const res = await fetch("/api/public-config");
+        if (!res.ok) return;
+        const cfg = await res.json();
+        if (cfg.business_name) {
+          document.getElementById("bizName").textContent = cfg.business_name;
+          document.title = `Driver Dashboard — ${cfg.business_name}`;
+        }
+      } catch { /* ignore */ }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    loadConfig();
+    loadBookings();
+  </script>
+</body>
+</html>
