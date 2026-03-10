@@ -1,14 +1,14 @@
 * { box-sizing: border-box; }
 
 :root {
-  --bg-a: #fff4e9;
+  --bg-a: #fdf0f8;
   --bg-b: #e9f4ff;
   --surface: #ffffff;
   --ink: #11243a;
   --muted: #51657f;
   --line: #d9e6f7;
   --brand: #0a6ed1;
-  --brand-2: #ff7a1a;
+  --brand-2: #e91e8c;
   --brand-soft: #eaf4ff;
   --ok-bg: #e9fbef;
   --ok-border: #beedcc;
@@ -21,7 +21,7 @@ body {
   font-family: Manrope, "Segoe UI", Arial, sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 10% 10%, #fff9f3 0%, transparent 40%),
+    radial-gradient(circle at 10% 10%, #fff0f9 0%, transparent 40%),
     radial-gradient(circle at 90% 0%, #eff7ff 0%, transparent 44%),
     linear-gradient(135deg, var(--bg-a), var(--bg-b));
 }
@@ -36,6 +36,7 @@ body {
   box-shadow: 0 20px 48px rgba(8, 36, 68, 0.12);
 }
 
+/* ── Hero ─────────────────────────────────────────────────────────── */
 .hero {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -45,8 +46,8 @@ body {
 }
 
 .hero-copy {
-  background: linear-gradient(140deg, #f0f8ff, #fff5eb);
-  border: 1px solid #dce9fa;
+  background: linear-gradient(140deg, #f0f8ff, #fff0f7);
+  border: 1px solid #f0c4e4;
   border-radius: 16px;
   padding: 20px;
 }
@@ -83,7 +84,19 @@ h1 {
   min-height: 240px;
   object-fit: cover;
   border-radius: 16px;
-  border: 1px solid #dfe8f7;
+  border: 1px solid #f0c4e4;
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+}
+
+.hero-image img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 32px rgba(233, 30, 140, 0.2);
+}
+
+/* ── Photo grid with animations ───────────────────────────────────── */
+@keyframes floatCard {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-7px); }
 }
 
 .photo-grid {
@@ -95,16 +108,34 @@ h1 {
 
 .photo-card {
   background: #fff;
-  border: 1px solid #dce8f8;
+  border: 1px solid #f0c4e4;
   border-radius: 14px;
   overflow: hidden;
+  animation: floatCard 4s ease-in-out infinite;
+  transition: box-shadow 0.3s ease;
+  cursor: default;
+}
+
+.photo-card:nth-child(2) { animation-delay: 1.4s; }
+.photo-card:nth-child(3) { animation-delay: 2.8s; }
+
+.photo-card:hover {
+  animation-play-state: paused;
+  box-shadow: 0 18px 36px rgba(233, 30, 140, 0.22);
+  transform: translateY(-10px) scale(1.02);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .photo-card img {
   width: 100%;
-  height: 140px;
+  height: 160px;
   object-fit: cover;
   display: block;
+  transition: transform 0.4s ease;
+}
+
+.photo-card:hover img {
+  transform: scale(1.06);
 }
 
 .photo-card p {
@@ -113,16 +144,19 @@ h1 {
   font-weight: 700;
   color: #294464;
   font-size: 14px;
+  background: linear-gradient(135deg, #fff0f9, #f0f8ff);
 }
 
+/* ── Pricing ──────────────────────────────────────────────────────── */
 .pricing {
-  background: #eff7ff;
-  border: 1px solid #cfe3ff;
+  background: linear-gradient(135deg, #f5f0ff, #f0f8ff);
+  border: 1px solid #d0c0f0;
   border-radius: 12px;
   padding: 12px 16px;
   margin-bottom: 20px;
 }
 
+/* ── Warmup status ────────────────────────────────────────────────── */
 .warmup-status {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -140,9 +174,9 @@ h1 {
 }
 
 .warmup-status.warn {
-  background: #fff4e6;
-  border-color: #ffd7ac;
-  color: #8f4c06;
+  background: #fff0f7;
+  border-color: #f9c0e0;
+  color: #7a1040;
 }
 
 .pricing ul {
@@ -150,6 +184,7 @@ h1 {
   padding-left: 18px;
 }
 
+/* ── Form ─────────────────────────────────────────────────────────── */
 .grid {
   display: grid;
   gap: 12px;
@@ -168,8 +203,8 @@ input, select, textarea, button {
 }
 
 input:focus, select:focus, textarea:focus {
-  outline: 2px solid #b8d9ff;
-  border-color: #9fc9fb;
+  outline: 2px solid #f9c0e0;
+  border-color: #e91e8c;
 }
 
 button {
@@ -193,9 +228,10 @@ button:disabled {
   box-shadow: none;
 }
 
+/* ── Calendar ─────────────────────────────────────────────────────── */
 .calendar-wrap {
-  border: 1px solid #ffd9bb;
-  background: #fff8f2;
+  border: 1px solid #f9c0e0;
+  background: linear-gradient(135deg, #fff0f9, #f8f4ff);
   border-radius: 12px;
   padding: 12px;
   margin-top: 18px;
@@ -217,8 +253,8 @@ button:disabled {
 .day-toggle button {
   width: auto;
   padding: 8px 12px;
-  background: #ffe5cf;
-  color: #8a4108;
+  background: #ffe5f5;
+  color: #7a1040;
 }
 
 .day-toggle button.active {
@@ -234,10 +270,10 @@ button:disabled {
 }
 
 .day-card {
-  border: 1px solid #ffd9b8;
+  border: 1px solid #f9c0e0;
   border-radius: 10px;
   padding: 8px;
-  background: #fffdfa;
+  background: #fff9fd;
 }
 
 .day-card h3 {
@@ -254,13 +290,15 @@ button:disabled {
 .slot-btn {
   padding: 7px 6px;
   font-size: 12px;
-  border: 1px solid #ffc99c;
-  background: #fff0e1;
-  color: #8f4307;
+  border: 1px solid #ffb3d1;
+  background: #fff0f7;
+  color: #7a1040;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
 
 .slot-btn:hover {
-  background: #ffe3ca;
+  background: #ffe0f2;
+  transform: translateY(-1px);
 }
 
 .slot-btn.selected {
@@ -281,6 +319,7 @@ button:disabled {
   border-color: #e8e8e8;
 }
 
+/* ── Result/Error ─────────────────────────────────────────────────── */
 .result, .error {
   margin-top: 14px;
   padding: 10px;
@@ -310,6 +349,7 @@ button:disabled {
   font-size: 15px;
 }
 
+/* ── Google Maps autocomplete ─────────────────────────────────────── */
 gmp-place-autocomplete {
   display: block;
   width: 100%;
@@ -329,10 +369,11 @@ gmp-place-autocomplete::part(input) {
 }
 
 gmp-place-autocomplete::part(input):focus {
-  outline: 2px solid #b8d9ff;
-  border-color: #9fc9fb;
+  outline: 2px solid #f9c0e0;
+  border-color: #e91e8c;
 }
 
+/* ── Responsive ───────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;
@@ -357,5 +398,11 @@ gmp-place-autocomplete::part(input):focus {
   .calendar-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  /* Reduce float on mobile to avoid layout shift */
+  @keyframes floatCard {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-4px); }
   }
 }
