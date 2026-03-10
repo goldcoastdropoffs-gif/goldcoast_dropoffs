@@ -18,8 +18,9 @@ from typing import Literal
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+import stripe
 from dotenv import load_dotenv
-from fastapi import Cookie, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Cookie, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -51,10 +52,14 @@ class Settings:
     google_maps_api_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
     driver_password: str = os.getenv("DRIVER_PASSWORD", "")
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-change-me")
+    stripe_secret_key: str = os.getenv("STRIPE_SECRET_KEY", "")
+    stripe_publishable_key: str = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 
 
 settings = Settings()
 signer = URLSafeTimedSerializer(settings.secret_key)
+if settings.stripe_secret_key:
+    stripe.api_key = settings.stripe_secret_key
 
 ServiceType = Literal["gold_coast", "direct", "gc_to_brisbane"]
 
@@ -122,6 +127,8 @@ class StoredBooking:
     status: str = "pending"  # pending, picked_up, delivered
     picked_up_at: str = ""
     delivered_at: str = ""
+    payment_status: str = "paid"  # paid (default for old bookings), unpaid
+    stripe_session_id: str = ""
 
 
 def _make_booking_id(item: dict) -> str:
@@ -142,6 +149,8 @@ def _load_bookings() -> list[StoredBooking]:
         item.setdefault("status", "pending")
         item.setdefault("picked_up_at", "")
         item.setdefault("delivered_at", "")
+        item.setdefault("payment_status", "paid")
+        item.setdefault("stripe_session_id", "")
         out.append(StoredBooking(**item))
     return out
 
@@ -169,7 +178,7 @@ def _is_valid_slot(dt: datetime) -> bool:
 
 
 def _booked_slot_keys(bookings: list[StoredBooking]) -> set[str]:
-    return {b.preferred_time for b in bookings}
+    return {b.preferred_time for b in bookings if b.payment_status == "paid"}
 
 
 def _assert_email_ready() -> None:
@@ -547,6 +556,171 @@ def create_booking(booking: BookingRequest) -> BookingResponse:
     )
 
 
+@app.post("/api/create-checkout")
+async def create_checkout(booking: BookingRequest, request: Request):
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=500, detail="Payment not configured.")
+
+    requested = booking.preferred_time.replace(second=0, microsecond=0)
+    if not _is_valid_slot(requested):
+        raise HTTPException(status_code=400, detail="Selected slot is invalid. Choose a valid calendar slot.")
+    key = _slot_key(requested)
+
+    pickup_confirmed = _normalize_address(booking.pickup_location, booking.pickup_place_id)
+    dropoff_confirmed = _normalize_address(booking.dropoff_location, booking.dropoff_place_id)
+    booking = booking.model_copy(update={"pickup_location": pickup_confirmed, "dropoff_location": dropoff_confirmed})
+
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        if key in _booked_slot_keys(bookings):
+            raise HTTPException(status_code=409, detail="Selected slot is already booked. Please choose another slot.")
+
+        booking_id = hashlib.md5(f"{datetime.now().isoformat()}{booking.email}".encode()).hexdigest()[:12]
+        stored = StoredBooking(
+            created_at=datetime.now().isoformat(timespec="seconds"),
+            full_name=booking.full_name,
+            email=str(booking.email),
+            phone=booking.phone,
+            service_type=booking.service_type,
+            pickup_location=booking.pickup_location,
+            dropoff_location=booking.dropoff_location,
+            preferred_time=key,
+            notes=booking.notes,
+            booking_id=booking_id,
+            payment_status="unpaid",
+        )
+        bookings.append(stored)
+        _save_bookings(bookings)
+
+    price = PRICE_MAP[booking.service_type]
+    service_label = SERVICE_LABELS[booking.service_type]
+    base_url = str(request.base_url).rstrip("/")
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "aud",
+                    "product_data": {
+                        "name": service_label,
+                        "description": f"{booking.pickup_location} → {booking.dropoff_location}",
+                    },
+                    "unit_amount": price * 100,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            customer_email=str(booking.email),
+            success_url=f"{base_url}/booking-success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{base_url}/booking-cancelled?booking_id={booking_id}",
+            metadata={"booking_id": booking_id},
+        )
+    except Exception as exc:
+        # Remove the unpaid booking if Stripe session creation failed
+        with BOOKINGS_LOCK:
+            rollback = [b for b in _load_bookings() if b.booking_id != booking_id]
+            _save_bookings(rollback)
+        raise HTTPException(status_code=500, detail=f"Payment setup failed: {exc}") from exc
+
+    # Store the stripe session id
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        for b in bookings:
+            if b.booking_id == booking_id:
+                b.stripe_session_id = session.id
+        _save_bookings(bookings)
+
+    return {"checkout_url": session.url}
+
+
+@app.get("/booking-success", response_class=HTMLResponse)
+def booking_success(session_id: str):
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=500, detail="Payment not configured.")
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not verify payment: {exc}")
+
+    if session.payment_status != "paid":
+        return HTMLResponse(_success_page("Payment pending", "Your payment is still processing. You will receive a confirmation email shortly."))
+
+    with BOOKINGS_LOCK:
+        bookings = _load_bookings()
+        booking = next((b for b in bookings if b.stripe_session_id == session_id), None)
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        if booking.payment_status != "paid":
+            booking.payment_status = "paid"
+            _save_bookings(bookings)
+            # Send confirmation emails
+            price = PRICE_MAP.get(booking.service_type, 0)
+            try:
+                from pydantic import TypeAdapter
+                email_validator = TypeAdapter(EmailStr)
+                email_validator.validate_python(booking.email)
+                body = (
+                    f"Booking confirmation — {settings.business_name}\n\n"
+                    f"Customer: {booking.full_name}\n"
+                    f"Service: {SERVICE_LABELS.get(booking.service_type, booking.service_type)}\n"
+                    f"Price: AUD ${price} (paid)\n"
+                    f"Pickup: {booking.pickup_location}\n"
+                    f"Dropoff: {booking.dropoff_location}\n"
+                    f"Booked slot: {booking.preferred_time}\n"
+                    f"Notes: {booking.notes or '-'}\n\n"
+                    f"Business phone: {settings.business_phone}\n"
+                )
+                if settings.smtp_host:
+                    _send_email(booking.email, f"Booking Confirmed — {settings.business_name}", body)
+                    if settings.business_email:
+                        _send_email(settings.business_email, f"New Paid Booking — {booking.full_name} — AUD ${price}", body)
+            except Exception:
+                pass
+
+    slot_label = booking.preferred_time.replace("T", " ") if booking else ""
+    return HTMLResponse(_success_page(
+        "Payment successful!",
+        f"Your booking is confirmed for {slot_label}. A confirmation email has been sent to {booking.email}.",
+    ))
+
+
+@app.get("/booking-cancelled", response_class=HTMLResponse)
+def booking_cancelled(booking_id: str | None = None):
+    if booking_id:
+        with BOOKINGS_LOCK:
+            bookings = _load_bookings()
+            remaining = [b for b in bookings if not (b.booking_id == booking_id and b.payment_status == "unpaid")]
+            _save_bookings(remaining)
+    return HTMLResponse(_success_page(
+        "Payment cancelled",
+        "No charge was made. Your slot has been released — you can go back and try again.",
+        is_cancel=True,
+    ))
+
+
+def _success_page(title: str, message: str, is_cancel: bool = False) -> str:
+    color = "#e91e8c" if not is_cancel else "#607691"
+    return f"""<!doctype html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  body{{margin:0;font-family:Manrope,sans-serif;background:linear-gradient(135deg,#fdf0f8,#e9f4ff);min-height:100vh;display:flex;align-items:center;justify-content:center}}
+  .card{{background:#fff;border-radius:20px;padding:40px 32px;max-width:480px;width:90%;text-align:center;box-shadow:0 20px 48px rgba(8,36,68,.12)}}
+  .icon{{font-size:56px;margin-bottom:16px}}
+  h1{{margin:0 0 12px;font-size:26px;color:{color}}}
+  p{{color:#51657f;line-height:1.6;margin:0 0 24px}}
+  a{{display:inline-block;padding:12px 28px;background:linear-gradient(120deg,#0a6ed1,#2f8be3);color:#fff;border-radius:10px;text-decoration:none;font-weight:800}}
+</style></head><body>
+<div class="card">
+  <div class="icon">{"✅" if not is_cancel else "↩️"}</div>
+  <h1>{title}</h1>
+  <p>{message}</p>
+  <a href="/">Back to home</a>
+</div></body></html>"""
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -559,6 +733,7 @@ def public_config() -> dict[str, object]:
         "business_phone": settings.business_phone,
         "booking_window_days": settings.booking_window_days,
         "google_maps_api_key": settings.google_maps_api_key,
+        "stripe_publishable_key": settings.stripe_publishable_key,
         "pricing": [
             {"key": key, "label": SERVICE_LABELS[key], "price_aud": PRICE_MAP[key]}
             for key in PRICE_MAP

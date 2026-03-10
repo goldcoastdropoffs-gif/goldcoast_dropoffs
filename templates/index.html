@@ -99,7 +99,7 @@
         <textarea name="notes" rows="4"></textarea>
       </label>
 
-      <button type="submit" id="submitBtn">Book Now</button>
+      <button type="submit" id="submitBtn">Book &amp; Pay Now</button>
     </form>
 
     <section class="calendar-wrap">
@@ -387,13 +387,13 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = "Submitting...";
+      submitBtn.textContent = "Going to payment...";
 
       const formData = new FormData(form);
       const payload = Object.fromEntries(formData.entries());
 
       try {
-        const response = await fetch("/api/bookings", {
+        const response = await fetch("/api/create-checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -405,25 +405,13 @@
         }
 
         const data = await response.json();
-        result.textContent = `${data.message} Price: AUD $${data.price_aud}. Slot: ${selectedSlotLabel}`;
-        result.style.display = "block";
-        form.reset();
-        selectedSlot = "";
-        selectedSlotLabel = "";
-        preferredTime.value = "";
-        slotDisplay.value = "";
-        slotBanner.style.display = "none";
-        pickupLocation.value = "";
-        dropoffLocation.value = "";
-        pickupPlaceId.value = "";
-        dropoffPlaceId.value = "";
-        await loadAvailability(currentDays);
+        // Redirect to Stripe Checkout
+        window.location.href = data.checkout_url;
       } catch (error) {
         errorBox.textContent = error.message || "Booking failed.";
         errorBox.style.display = "block";
-      } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "Book Now";
+        submitBtn.textContent = "Book & Pay Now";
       }
     });
 
